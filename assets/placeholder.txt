@@ -1,0 +1,1 @@
+This folder is for storing audio files and other assets used by the application.
