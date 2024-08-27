@@ -5,13 +5,11 @@ Main entry point for the AudioTranscriptionApp.
 import os
 import speech_recognition as sr
 
-def transcribe_audio(file_path):
+def transcribe_audio(audio):
     """
-    Transcribe the given audio file.
+    Transcribe the given audio data.
     """
     recognizer = sr.Recognizer()
-    with sr.AudioFile(file_path) as source:
-        audio = recognizer.record(source)
     try:
         return recognizer.recognize_google(audio)
     except sr.UnknownValueError:
@@ -25,14 +23,15 @@ def main():
     """
     print("Welcome to AudioTranscriptionApp!")
     
-    audio_file = input("Please enter the path to your audio file: ")
-    
-    if not os.path.exists(audio_file):
-        print(f"Error: The file {audio_file} does not exist.")
-        return
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        print("Adjusting for ambient noise. Please wait...")
+        recognizer.adjust_for_ambient_noise(source)
+        print("Recording audio. Please speak now...")
+        audio = recognizer.listen(source)
 
     print("Transcribing audio...")
-    transcription = transcribe_audio(audio_file)
+    transcription = transcribe_audio(audio)
     print("\nTranscription:")
     print(transcription)
 
