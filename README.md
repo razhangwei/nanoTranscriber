@@ -44,13 +44,14 @@ The `app.py` file contains the core functionalities of the AudioTranscriptionApp
 
 1. Run the application:
    ```
-   sudo python src/app.py 
+   sudo python src/app.py
    ```
 2. When pressing the hotkey, it will start recording and when pressing again, it still stop recording and the transcribed tax will automatically be typed to the text box of the current window.
 
 ## Roadmap
-- [ ] Support custom vocabulary through initial prompt. 
-- [ ] Customizable hotkey. 
+
+- [x] Support custom vocabulary through initial prompt.
+- [ ] Customizable hotkey.
 
 ## Contributing
 

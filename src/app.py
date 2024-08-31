@@ -12,6 +12,9 @@ import sys
 from mlx_whisper.transcribe import ModelHolder
 import mlx.core as mx
 import queue
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Global variables
 is_recording = False
@@ -19,6 +22,7 @@ keyboard_controller = Controller()
 pressed_keys = set()
 recording_queue = queue.Queue()
 stop_recording = threading.Event()
+CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
@@ -44,6 +48,7 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
             audio_float32,
             path_or_hf_repo=get_hf_repo(model_name, language),
             language=language,
+            initial_prompt=", ".join(CUSTOM_VOCAB.split(",")) if CUSTOM_VOCAB else None,
         )
         end_time = time.time()
         transcription_time = end_time - start_time
