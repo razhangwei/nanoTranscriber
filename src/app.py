@@ -20,7 +20,6 @@ recording_queue = queue.Queue()
 stop_recording = threading.Event()
 
 
-# TODO: to improve the performance
 def transcribe_audio(audio: AudioData, model_name: str) -> str:
     try:
         # Convert audio to numpy array
@@ -30,27 +29,56 @@ def transcribe_audio(audio: AudioData, model_name: str) -> str:
         # Normalize the audio to float32 in the range [-1.0, 1.0]
         audio_float32 = audio_array.astype(np.float32) / 32768.0
 
+        start_time = time.time()
         result = mlx_whisper.transcribe(
-            audio_float32, path_or_hf_repo=f"mlx-community/whisper-{model_name}-mlx"
+            audio_float32,
+            path_or_hf_repo=f"mlx-community/whisper-{model_name}-mlx",
+            language="en",
         )
+        end_time = time.time()
+        transcription_time = end_time - start_time
+        print(
+            f"Transcription time: {transcription_time:.2f} s. Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
+        )
+
         return result["text"]
     except Exception as e:
         return str(e)
 
 
 def record_audio():
-    global is_recording, audio_data
+    global is_recording
     recognizer = sr.Recognizer()
+
     with sr.Microphone() as source:
         print("Recording audio. Please speak now...")
         recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        try:
-            audio_data = recognizer.listen(source, timeout=1000, phrase_time_limit=1000)
-            recording_queue.put(audio_data)
-        except sr.WaitTimeoutError:
-            print("No speech detected. Timeout reached.")
-        finally:
-            is_recording = False
+
+        audio_chunks = []
+        while is_recording:
+            try:
+                audio_chunk = recognizer.listen(source, timeout=1, phrase_time_limit=1)
+                audio_chunks.append(audio_chunk)
+            except sr.WaitTimeoutError:
+                # This exception is raised when listen() times out.
+                # We'll just continue the loop to keep recording.
+                pass
+
+    # Combine all audio chunks
+    if audio_chunks:
+        # Concatenate raw audio data
+        raw_data = b"".join(chunk.get_raw_data() for chunk in audio_chunks)
+
+        # Create a new AudioData object with the combined raw data
+        combined_audio = sr.AudioData(
+            raw_data, audio_chunks[0].sample_rate, audio_chunks[0].sample_width
+        )
+
+        recording_queue.put(combined_audio)
+    else:
+        print("No audio recorded.")
+
+    is_recording = False
 
 
 def on_activate(model_name):
@@ -96,18 +124,22 @@ def main(model_name, timeout):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
     print(f"Timeout set to: {timeout} seconds")
-    print("Press Ctrl + v to start recording and transcribe.")
+    print("Press Shift + Ctrl + Cmd + R to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
 
     # pre-load model
-
     print("Pre-loading model...")
     _ = ModelHolder.get_model(f"mlx-community/whisper-{model_name}-mlx", mx.float16)
 
     def on_press(key):
-        if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
+        if key in (
+            keyboard.Key.shift,
+            keyboard.Key.ctrl_l,
+            keyboard.Key.ctrl_r,
+            keyboard.Key.cmd,
+        ):
             return True
-        if key == keyboard.KeyCode.from_char("v"):
+        if key == keyboard.KeyCode.from_char("r"):
             on_activate(model_name)
 
     def on_release(key):
