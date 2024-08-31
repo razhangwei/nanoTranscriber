@@ -20,7 +20,16 @@ recording_queue = queue.Queue()
 stop_recording = threading.Event()
 
 
-def transcribe_audio(audio: AudioData, model_name: str) -> str:
+def get_hf_repo(model_name: str, language: str = None) -> str:
+    if language == 'en' and model_name in ["large", "large-v3"]:
+        return "mlx-community/distil-whisper-large-v3"
+    elif language == 'en' and model_name == "medium":
+        return "mlx-community/distil-whisper-medium.en"
+    else: 
+        return f"mlx-community/whisper-{model_name}-mlx"
+    
+
+def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     try:
         # Convert audio to numpy array
         audio_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
@@ -32,8 +41,8 @@ def transcribe_audio(audio: AudioData, model_name: str) -> str:
         start_time = time.time()
         result = mlx_whisper.transcribe(
             audio_float32,
-            path_or_hf_repo=f"mlx-community/whisper-{model_name}-mlx",
-            language="en",
+            path_or_hf_repo=get_hf_repo(model_name, language),
+            language=language,
         )
         end_time = time.time()
         transcription_time = end_time - start_time
@@ -81,7 +90,7 @@ def record_audio():
     is_recording = False
 
 
-def on_activate(model_name):
+def on_activate(model_name, language):
     global is_recording, recording_thread
     if not is_recording:
         is_recording = True
@@ -98,7 +107,7 @@ def on_activate(model_name):
         try:
             audio_data = recording_queue.get_nowait()
             print("Transcribing audio...")
-            transcription = transcribe_audio(audio_data, model_name)
+            transcription = transcribe_audio(audio_data, model_name, language)
             if transcription:
                 keyboard_controller.type(transcription)
             else:
@@ -120,16 +129,22 @@ def on_activate(model_name):
     type=int,
     help="Timeout for speech recognition in seconds.",
 )
-def main(model_name, timeout):
+@click.option(
+    "--language",
+    default=None,
+    help="Language for transcription. Use ISO 639-1 codes (e.g., 'en' for English). ""If not specified, it defaults to multilingual model and language will be auto detected.",
+)
+def main(model_name, timeout, language):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
     print(f"Timeout set to: {timeout} seconds")
+    print(f"Language set to: {language if language else 'auto-detect'}")     
     print("Press Shift + Ctrl + Cmd + R to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
 
     # pre-load model
     print("Pre-loading model...")
-    _ = ModelHolder.get_model(f"mlx-community/whisper-{model_name}-mlx", mx.float16)
+    _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
     def on_press(key):
         if key in (
@@ -140,7 +155,7 @@ def main(model_name, timeout):
         ):
             return True
         if key == keyboard.KeyCode.from_char("r"):
-            on_activate(model_name)
+            on_activate(model_name, language)
 
     def on_release(key):
         if key == keyboard.Key.esc:
@@ -156,7 +171,7 @@ def main(model_name, timeout):
             listener.stop()
             sys.exit(0)
         print("Manual activation triggered.")
-        on_activate(model_name)
+        on_activate(model_name, language)
 
 
 if __name__ == "__main__":
