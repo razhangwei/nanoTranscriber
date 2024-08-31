@@ -4,10 +4,26 @@ AudioTranscriptionApp is a powerful tool for transcribing audio files into text.
 
 ## Features
 
-- Audio file transcription
-- Support for various audio formats
-- User-friendly command-line interface
-- High accuracy transcription using Google Speech Recognition
+- **Audio file transcription**: Convert spoken words in audio recordings into written text.
+- **Support for various audio formats**: Handles different audio formats for transcription.
+- **User-friendly command-line interface**: Easy-to-use CLI for interacting with the application.
+- **High accuracy transcription using Google Speech Recognition**: Utilizes Google Speech Recognition for accurate transcription.
+
+## How It Works
+
+The `app.py` file contains the core functionalities of the AudioTranscriptionApp. Here's a brief overview of how it works:
+
+1. **Audio Recording**: The application records audio using the microphone.
+2. **Audio Processing**: The recorded audio is processed and converted into a format suitable for transcription.
+3. **Transcription**: The processed audio is transcribed using the Whisper model.
+4. **Output**: The transcription result is displayed and can be typed directly using the keyboard controller.
+
+### Key Components
+
+- **transcribe_audio**: This function transcribes the audio data using the specified Whisper model.
+- **record_audio**: This function records audio from the microphone and stores it in a queue for processing.
+- **on_activate**: This function handles the activation of audio recording and transcription.
+- **main**: The main function initializes the application, sets up the Whisper model, and handles user interactions.
 
 ## Installation
 
@@ -28,10 +44,13 @@ AudioTranscriptionApp is a powerful tool for transcribing audio files into text.
 
 1. Run the application:
    ```
-   python src/main.py
+   sudo python src/app.py 
    ```
-2. When prompted, enter the path to your audio file.
-3. The application will transcribe the audio and display the result.
+2. When pressing the hotkey, it will start recording and when pressing again, it still stop recording and the transcribed tax will automatically be typed to the text box of the current window.
+
+## Roadmap
+- [ ] Support custom vocabulary through initial prompt. 
+- [ ] Customizable hotkey. 
 
 ## Contributing
 
