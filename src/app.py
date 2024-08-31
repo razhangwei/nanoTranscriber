@@ -11,12 +11,16 @@ from pynput.keyboard import Key, Controller
 import sys
 from mlx_whisper.transcribe import ModelHolder
 import mlx.core as mx
+import queue
 
 # Global variables
 is_recording = False
 keyboard_controller = Controller()
+recording_queue = queue.Queue()
+stop_recording = threading.Event()
 
 
+# TODO: to improve the performance
 def transcribe_audio(audio: AudioData, model_name: str) -> str:
     try:
         # Convert audio to numpy array
@@ -34,34 +38,52 @@ def transcribe_audio(audio: AudioData, model_name: str) -> str:
         return str(e)
 
 
-def record_and_transcribe(model_name: str) -> str:
-    global is_recording
+def record_audio():
+    global is_recording, audio_data
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         print("Recording audio. Please speak now...")
         recognizer.adjust_for_ambient_noise(source, duration=0.5)
         try:
-            audio = recognizer.listen(source)
-            print("Finished recording.")
+            audio_data = recognizer.listen(source, timeout=1000, phrase_time_limit=1000)
+            recording_queue.put(audio_data)
         except sr.WaitTimeoutError:
             print("No speech detected. Timeout reached.")
-            return ""
+        finally:
+            is_recording = False
 
-    print("Transcribing audio...")
-    try:
-        transcription = transcribe_audio(audio, model_name)
-        print("Transcription completed.")
-        return transcription
-    except Exception as e:
-        print(f"Error during transcription: {e}")
-        return ""
+
+def on_activate(model_name):
+    global is_recording, recording_thread
+    if not is_recording:
+        is_recording = True
+        stop_recording.clear()
+        print("Started recording...")
+        recording_thread = threading.Thread(target=record_audio)
+        recording_thread.start()
+    else:
+        stop_recording.set()
+        is_recording = False
+        print("Stopped recording.")
+        if recording_thread:
+            recording_thread.join()
+        try:
+            audio_data = recording_queue.get_nowait()
+            print("Transcribing audio...")
+            transcription = transcribe_audio(audio_data, model_name)
+            if transcription:
+                keyboard_controller.type(transcription)
+            else:
+                print("No transcription to type.")
+        except queue.Empty:
+            print("No audio data to transcribe.")
 
 
 @click.command()
 @click.option(
     "--model-name",
     default="base",
-    type=click.Choice(["base", "small", "medium", "large"]),
+    type=click.Choice(["base", "small", "medium", "large-v3"]),
     help="The name of the Whisper model to use.",
 )
 @click.option(
@@ -82,26 +104,11 @@ def main(model_name, timeout):
     print("Pre-loading model...")
     _ = ModelHolder.get_model(f"mlx-community/whisper-{model_name}-mlx", mx.float16)
 
-    def on_activate():
-        global is_recording
-        if not is_recording:
-            is_recording = True
-            print("Started recording...")
-            transcription = record_and_transcribe(model_name)
-            is_recording = False
-
-            if transcription:
-                keyboard_controller.type(transcription)
-            else:
-                print("No transcription to type.")
-        else:
-            print("Already recording...")
-
     def on_press(key):
         if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
             return True
         if key == keyboard.KeyCode.from_char("v"):
-            on_activate()
+            on_activate(model_name)
 
     def on_release(key):
         if key == keyboard.Key.esc:
@@ -117,7 +124,7 @@ def main(model_name, timeout):
             listener.stop()
             sys.exit(0)
         print("Manual activation triggered.")
-        on_activate()
+        on_activate(model_name)
 
 
 if __name__ == "__main__":
