@@ -1,3 +1,5 @@
 SpeechRecognition
 pyaudio
 mlx_whisper
+pynput
+click
