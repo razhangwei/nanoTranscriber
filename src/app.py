@@ -9,6 +9,8 @@ from speech_recognition import AudioData
 from pynput import keyboard
 from pynput.keyboard import Key, Controller
 import sys
+from mlx_whisper.transcribe import ModelHolder
+import mlx.core as mx
 
 # Global variables
 is_recording = False
@@ -37,8 +39,9 @@ def record_and_transcribe(model_name: str) -> str:
     recognizer = sr.Recognizer()
     with sr.Microphone() as source:
         print("Recording audio. Please speak now...")
+        recognizer.adjust_for_ambient_noise(source, duration=0.5)
         try:
-            audio = recognizer.listen(source, timeout=3, phrase_time_limit=5)
+            audio = recognizer.listen(source)
             print("Finished recording.")
         except sr.WaitTimeoutError:
             print("No speech detected. Timeout reached.")
@@ -54,24 +57,6 @@ def record_and_transcribe(model_name: str) -> str:
         return ""
 
 
-def on_activate(model_name: str):
-    global is_recording
-    if not is_recording:
-        is_recording = True
-        print("Started recording...")
-        transcription = record_and_transcribe(model_name)
-        is_recording = False
-
-        if transcription:
-            print("Typing transcription...")
-            keyboard_controller.type(transcription)
-            print("Transcription typed:", transcription)
-        else:
-            print("No transcription to type.")
-    else:
-        print("Already recording...")
-
-
 @click.command()
 @click.option(
     "--model-name",
@@ -79,17 +64,44 @@ def on_activate(model_name: str):
     type=click.Choice(["base", "small", "medium", "large"]),
     help="The name of the Whisper model to use.",
 )
-def main(model_name):
+@click.option(
+    "--timeout",
+    default=3,
+    type=int,
+    help="Timeout for speech recognition in seconds.",
+)
+def main(model_name, timeout):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
+    print(f"Timeout set to: {timeout} seconds")
     print("Press Ctrl + v to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
+
+    # pre-load model
+
+    print("Pre-loading model...")
+    _ = ModelHolder.get_model(f"mlx-community/whisper-{model_name}-mlx", mx.float16)
+
+    def on_activate():
+        global is_recording
+        if not is_recording:
+            is_recording = True
+            print("Started recording...")
+            transcription = record_and_transcribe(model_name)
+            is_recording = False
+
+            if transcription:
+                keyboard_controller.type(transcription)
+            else:
+                print("No transcription to type.")
+        else:
+            print("Already recording...")
 
     def on_press(key):
         if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
             return True
         if key == keyboard.KeyCode.from_char("v"):
-            on_activate(model_name)
+            on_activate()
 
     def on_release(key):
         if key == keyboard.Key.esc:
@@ -105,7 +117,7 @@ def main(model_name):
             listener.stop()
             sys.exit(0)
         print("Manual activation triggered.")
-        on_activate(model_name)
+        on_activate()
 
 
 if __name__ == "__main__":
