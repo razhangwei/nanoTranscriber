@@ -16,18 +16,19 @@ import queue
 # Global variables
 is_recording = False
 keyboard_controller = Controller()
+pressed_keys = set()
 recording_queue = queue.Queue()
 stop_recording = threading.Event()
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
-    if language == 'en' and model_name in ["large", "large-v3"]:
+    if language == "en" and model_name in ["large", "large-v3"]:
         return "mlx-community/distil-whisper-large-v3"
-    elif language == 'en' and model_name == "medium":
+    elif language == "en" and model_name == "medium":
         return "mlx-community/distil-whisper-medium.en"
-    else: 
+    else:
         return f"mlx-community/whisper-{model_name}-mlx"
-    
+
 
 def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     try:
@@ -132,13 +133,14 @@ def on_activate(model_name, language):
 @click.option(
     "--language",
     default=None,
-    help="Language for transcription. Use ISO 639-1 codes (e.g., 'en' for English). ""If not specified, it defaults to multilingual model and language will be auto detected.",
+    help="Language for transcription. Use ISO 639-1 codes (e.g., 'en' for English). "
+    "If not specified, it defaults to multilingual model and language will be auto detected.",
 )
 def main(model_name, timeout, language):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
     print(f"Timeout set to: {timeout} seconds")
-    print(f"Language set to: {language if language else 'auto-detect'}")     
+    print(f"Language set to: {language if language else 'auto-detect'}")
     print("Press Shift + Ctrl + Cmd + R to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
 
@@ -147,17 +149,24 @@ def main(model_name, timeout, language):
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
     def on_press(key):
-        if key in (
-            keyboard.Key.shift,
-            keyboard.Key.ctrl_l,
-            keyboard.Key.ctrl_r,
-            keyboard.Key.cmd,
+        global pressed_keys
+        pressed_keys.add(key)
+        if all(
+            k in pressed_keys
+            for k in (
+                keyboard.Key.shift,
+                keyboard.Key.ctrl_l,
+                keyboard.Key.cmd,
+                keyboard.KeyCode.from_char("r"),
+            )
         ):
-            return True
-        if key == keyboard.KeyCode.from_char("r"):
             on_activate(model_name, language)
+            pressed_keys.clear()  # Clear the set after activation
 
     def on_release(key):
+        global pressed_keys
+        if key in pressed_keys:
+            pressed_keys.remove(key)
         if key == keyboard.Key.esc:
             return False
 
