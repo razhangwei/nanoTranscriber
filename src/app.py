@@ -7,7 +7,6 @@ import numpy as np
 import click
 from speech_recognition import AudioData
 from pynput import keyboard
-from pynput.keyboard import Key, Controller
 import sys
 from mlx_whisper.transcribe import ModelHolder
 import mlx.core as mx
@@ -18,7 +17,7 @@ load_dotenv()
 
 # Global variables
 is_recording = False
-keyboard_controller = Controller()
+keyboard_controller = keyboard.Controller()
 pressed_keys = set()
 recording_queue = queue.Queue()
 stop_recording = threading.Event()
@@ -124,27 +123,22 @@ def on_activate(model_name, language):
 
 @click.command()
 @click.option(
+    "-m",
     "--model-name",
     default="base",
     type=click.Choice(["base", "small", "medium", "large-v3"]),
     help="The name of the Whisper model to use.",
 )
 @click.option(
-    "--timeout",
-    default=3,
-    type=int,
-    help="Timeout for speech recognition in seconds.",
-)
-@click.option(
+    "-l",
     "--language",
     default=None,
     help="Language for transcription. Use ISO 639-1 codes (e.g., 'en' for English). "
     "If not specified, it defaults to multilingual model and language will be auto detected.",
 )
-def main(model_name, timeout, language):
+def main(model_name, language):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
-    print(f"Timeout set to: {timeout} seconds")
     print(f"Language set to: {language if language else 'auto-detect'}")
     print("Press Shift + Ctrl + Cmd + R to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
