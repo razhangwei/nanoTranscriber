@@ -81,7 +81,7 @@ def record_audio():
 
         audio_chunks: list[AudioData] = []
         while is_recording:
-            audio_chunk: AudioData = recognizer.listen(source)
+            audio_chunk: AudioData = recognizer.listen(source, timeout=1)
             audio_chunks.append(audio_chunk)
 
     # Combine all audio chunks
@@ -121,7 +121,9 @@ def on_activate(model_name, language):
             transcription = transcribe_audio(audio_data, model_name, language)
             if transcription:
                 print(f"Transcription text: {transcription}")
-                keyboard_controller.type(transcription)
+                keyboard_controller.type(
+                    transcription
+                )  # type the transcription to the current active window
             else:
                 print("No transcription to type.")
         except queue.Empty:
@@ -145,7 +147,7 @@ def on_activate(model_name, language):
 )
 def main(model_name, language):
     print("Welcome to AudioTranscriptionApp!")
-    print(f"Using Whisper model: {model_name}")
+    print(f"Using Whisper model: {get_hf_repo(model_name, language)}")
     print(f"Language set to: {language if language else 'auto-detect'}")
     print(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
