@@ -25,7 +25,7 @@ CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
-    if language == "en" and model_name in ["large", "large-v3"]:
+    if language == "en" and model_name in ["large-v3"]:
         return "mlx-community/distil-whisper-large-v3"
     elif language == "en" and model_name == "medium":
         return "mlx-community/distil-whisper-medium.en"
@@ -33,31 +33,42 @@ def get_hf_repo(model_name: str, language: str = None) -> str:
         return f"mlx-community/whisper-{model_name}-mlx"
 
 
+def parse_hotkey(hotkey_str):
+    """Parse hotkey string into a set of Key objects"""
+    keys = set()
+    for key in hotkey_str.split("+"):
+        key = key.strip().lower()
+        try:
+            # Try to get the key from the Key enum
+            keys.add(keyboard.Key[key])
+        except KeyError:
+            # If it's not in the Key enum, treat it as a character
+            keys.add(keyboard.KeyCode.from_char(key))
+    return keys
+
+
 def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
-    try:
-        # Convert audio to numpy array
-        audio_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
-        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+    # Convert audio to numpy array
+    audio_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
+    audio_array = np.frombuffer(audio_data, dtype=np.int16)
 
-        # Normalize the audio to float32 in the range [-1.0, 1.0]
-        audio_float32 = audio_array.astype(np.float32) / 32768.0
+    # Normalize the audio to float32 in the range [-1.0, 1.0]
+    audio_float32 = audio_array.astype(np.float32) / 32768.0
 
-        start_time = time.time()
-        result = mlx_whisper.transcribe(
-            audio_float32,
-            path_or_hf_repo=get_hf_repo(model_name, language),
-            language=language,
-            initial_prompt=", ".join(CUSTOM_VOCAB.split(",")) if CUSTOM_VOCAB else None,
-        )
-        end_time = time.time()
-        transcription_time = end_time - start_time
-        print(
-            f"Transcription time: {transcription_time:.2f} s. Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
-        )
+    start_time = time.time()
+    result = mlx_whisper.transcribe(
+        audio_float32,
+        path_or_hf_repo=get_hf_repo(model_name, language),
+        language=language,
+        initial_prompt=", ".join(CUSTOM_VOCAB.split(",")) if CUSTOM_VOCAB else None,
+    )
+    end_time = time.time()
+    transcription_time = end_time - start_time
+    print(
+        f"Transcription time: {transcription_time:.2f} s. Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
+    )
 
-        return result["text"]
-    except Exception as e:
-        return str(e)
+    return result["text"]
 
 
 def record_audio():
@@ -68,15 +79,10 @@ def record_audio():
         print("Recording audio. Please speak now...")
         recognizer.adjust_for_ambient_noise(source, duration=0.5)
 
-        audio_chunks = []
+        audio_chunks: list[AudioData] = []
         while is_recording:
-            try:
-                audio_chunk = recognizer.listen(source, timeout=1, phrase_time_limit=1)
-                audio_chunks.append(audio_chunk)
-            except sr.WaitTimeoutError:
-                # This exception is raised when listen() times out.
-                # We'll just continue the loop to keep recording.
-                pass
+            audio_chunk: AudioData = recognizer.listen(source)
+            audio_chunks.append(audio_chunk)
 
     # Combine all audio chunks
     if audio_chunks:
@@ -114,6 +120,7 @@ def on_activate(model_name, language):
             print("Transcribing audio...")
             transcription = transcribe_audio(audio_data, model_name, language)
             if transcription:
+                print(f"Transcription text: {transcription}")
                 keyboard_controller.type(transcription)
             else:
                 print("No transcription to type.")
@@ -140,25 +147,19 @@ def main(model_name, language):
     print("Welcome to AudioTranscriptionApp!")
     print(f"Using Whisper model: {model_name}")
     print(f"Language set to: {language if language else 'auto-detect'}")
-    print("Press Shift + Ctrl + Cmd + R to start recording and transcribe.")
+    print(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
 
     # pre-load model
     print("Pre-loading model...")
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
+    hotkey = parse_hotkey(os.getenv("HOTKEY"))
+
     def on_press(key):
         global pressed_keys
         pressed_keys.add(key)
-        if all(
-            k in pressed_keys
-            for k in (
-                keyboard.Key.shift,
-                keyboard.Key.ctrl_l,
-                keyboard.Key.cmd,
-                keyboard.KeyCode.from_char("r"),
-            )
-        ):
+        if all(k in pressed_keys for k in hotkey):
             on_activate(model_name, language)
             pressed_keys.clear()  # Clear the set after activation
 
