@@ -51,7 +51,17 @@ The `app.py` file contains the core functionalities of the AudioTranscriptionApp
 ## Roadmap
 
 - [x] Support custom vocabulary through initial prompt.
-- [ ] Customizable hotkey.
+- [x] Customizable hotkey.
+- [ ] Implement robust error handling and exception management.
+- [ ] Create a separate configuration file for better settings management.
+- [ ] Modularize the codebase for improved organization and maintainability.
+- [ ] Add progress indicators for better user feedback during transcription.
+- [ ] Expand customization options through additional command-line arguments.
+- [ ] Optimize performance, especially for audio processing and transcription.
+- [ ] Refactor code to reduce global variables and implement proper state management.
+- [ ] Add comprehensive unit tests for core functionalities.
+- [ ] Implement a proper logging system for better debugging and monitoring.
+- [ ] Enhance input validation for user inputs and configuration settings.
 
 ## Contributing
 

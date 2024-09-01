@@ -25,6 +25,16 @@ CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
+    """
+    Determine the appropriate Hugging Face repository for the Whisper model.
+
+    Args:
+        model_name (str): The name of the Whisper model.
+        language (str, optional): The target language for transcription.
+
+    Returns:
+        str: The Hugging Face repository name for the specified model and language.
+    """
     if language == "en" and model_name in ["large-v3"]:
         return "mlx-community/distil-whisper-large-v3"
     elif language == "en" and model_name == "medium":
@@ -33,8 +43,16 @@ def get_hf_repo(model_name: str, language: str = None) -> str:
         return f"mlx-community/whisper-{model_name}-mlx"
 
 
-def parse_hotkey(hotkey_str):
-    """Parse hotkey string into a set of Key objects"""
+def parse_hotkey(hotkey_str: str) -> set[keyboard.Key]:
+    """
+    Parse a hotkey string into a set of Key objects.
+
+    Args:
+        hotkey_str (str): A string representation of the hotkey (e.g., "ctrl+shift+a").
+
+    Returns:
+        set: A set of pynput.keyboard.Key objects representing the hotkey.
+    """
     keys = set()
     for key in hotkey_str.split("+"):
         key = key.strip().lower()
@@ -48,6 +66,17 @@ def parse_hotkey(hotkey_str):
 
 
 def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
+    """
+    Transcribe the given audio data using the specified Whisper model and language.
+
+    Args:
+        audio (AudioData): The audio data to transcribe.
+        model_name (str): The name of the Whisper model to use.
+        language (str): The language of the audio for transcription.
+
+    Returns:
+        str: The transcribed text.
+    """
     # Convert audio to numpy array
     audio_data = audio.get_raw_data(convert_rate=16000, convert_width=2)
     audio_array = np.frombuffer(audio_data, dtype=np.int16)
@@ -72,6 +101,12 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
 
 
 def record_audio():
+    """
+    Record audio from the microphone and add it to the recording queue.
+
+    This function runs in a separate thread and continues recording
+    as long as the global is_recording flag is True.
+    """
     global is_recording
     recognizer = sr.Recognizer()
 
@@ -102,6 +137,16 @@ def record_audio():
 
 
 def on_activate(model_name, language):
+    """
+    Handle the activation of audio recording and transcription.
+
+    This function is called when the hotkey is pressed or manual activation is triggered.
+    It starts or stops the recording process and initiates transcription when recording stops.
+
+    Args:
+        model_name (str): The name of the Whisper model to use for transcription.
+        language (str): The language to use for transcription.
+    """
     global is_recording, recording_thread
     if not is_recording:
         is_recording = True
@@ -152,13 +197,14 @@ def main(model_name, language):
     print(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
     print("If hotkey doesn't work, press Enter to start recording manually.")
 
-    # pre-load model
+    # Pre-load model
     print("Pre-loading model...")
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
     hotkey = parse_hotkey(os.getenv("HOTKEY"))
 
     def on_press(key):
+        """Handle key press events."""
         global pressed_keys
         pressed_keys.add(key)
         if all(k in pressed_keys for k in hotkey):
@@ -166,6 +212,7 @@ def main(model_name, language):
             pressed_keys.clear()  # Clear the set after activation
 
     def on_release(key):
+        """Handle key release events."""
         global pressed_keys
         if key in pressed_keys:
             pressed_keys.remove(key)
