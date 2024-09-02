@@ -42,20 +42,52 @@ The `app.py` file contains the core functionalities of the AudioTranscriptionApp
 
 ## Usage
 
-1. Run the application:
+1. Set up your environment variables:
+   Create a `.env` file in the project root directory with the following content:
+
    ```
-   sudo python src/app.py
+   HOTKEY=ctrl+shift+a
+   CUSTOM_VOCAB=your,custom,vocabulary,words
    ```
-2. When pressing the hotkey, it will start recording and when pressing again, it still stop recording and the transcribed tax will automatically be typed to the text box of the current window.
+
+   Adjust the `HOTKEY` and `CUSTOM_VOCAB` as needed.
+
+2. Run the application:
+
+   ```
+   python src/app.py
+   ```
+
+   You can also specify the model and language:
+
+   ```
+   python src/app.py --model-name medium --language en
+   ```
+
+3. The application will start and wait for the hotkey press.
+
+4. Press the defined hotkey (e.g., ctrl+shift+a) to start recording.
+
+   - You'll see "Recording" followed by dots appearing in your active text field.
+
+5. Press the hotkey again to stop recording.
+
+   - The "Recording" message will be cleared.
+   - You'll briefly see "Transcribing" followed by dots.
+   - The transcribed text will be automatically typed into your active text field.
+
+6. Repeat steps 4-5 as needed for more transcriptions.
+
+7. To exit the application, use Ctrl+C in the terminal where it's running.
+
+Note: Ensure you have the necessary permissions to use the microphone and simulate keyboard input on your system.
 
 ## Roadmap
 
 - [x] Support custom vocabulary through initial prompt.
 - [x] Customizable hotkey.
-- [ ] Implement robust error handling and exception management.
-- [ ] Create a separate configuration file for better settings management.
+- [x] Add progress indicators for better user feedback during transcription.
 - [ ] Modularize the codebase for improved organization and maintainability.
-- [ ] Add progress indicators for better user feedback during transcription.
 - [ ] Expand customization options through additional command-line arguments.
 - [ ] Optimize performance, especially for audio processing and transcription.
 - [ ] Refactor code to reduce global variables and implement proper state management.
