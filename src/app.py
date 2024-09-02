@@ -22,13 +22,59 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
+
+class AudioRecorder:
+    def __init__(self):
+        self.is_recording = False
+        self.recording_queue = queue.Queue()
+        self.stop_recording = threading.Event()
+        self.recording_thread = None
+
+    def start_recording(self):
+        if not self.is_recording:
+            self.is_recording = True
+            self.stop_recording.clear()
+            logger.info("Started recording... Press 'esc' to stop recording without transcribing.")
+            self.recording_thread = threading.Thread(target=self._record_audio)
+            self.recording_thread.start()
+
+    def stop_recording_process(self):
+        self.is_recording = False
+        self.stop_recording.set()
+        if self.recording_thread:
+            self.recording_thread.join()
+
+    def _record_audio(self, chunk_duration=0.5):
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            logger.info("Recording audio. Please speak now...")
+            recognizer.adjust_for_ambient_noise(source)
+            audio_chunks = []
+            while self.is_recording:
+                if self.stop_recording.is_set():
+                    logger.info("Recording stopped by 'esc' key.")
+                    audio_chunks.clear()
+                    break
+                audio_chunk = recognizer.record(source, duration=chunk_duration)
+                audio_chunks.append(audio_chunk)
+
+        if audio_chunks:
+            raw_data = b"".join(chunk.get_raw_data() for chunk in audio_chunks)
+            combined_audio = sr.AudioData(
+                raw_data, audio_chunks[0].sample_rate, audio_chunks[0].sample_width
+            )
+            self.recording_queue.put(combined_audio)
+
+    def get_recorded_audio(self):
+        try:
+            return self.recording_queue.get_nowait()
+        except queue.Empty:
+            return None
+
 # Global variables
-is_recording = False
 keyboard_controller = keyboard.Controller()
 pressed_keys = set()
-recording_queue = queue.Queue()
-stop_recording = threading.Event()
-CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
@@ -108,43 +154,6 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     return result["text"].strip()
 
 
-def record_audio(chunk_duration=0.5):
-    """
-    Record audio from the microphone and add it to the recording queue.
-
-    This function runs in a separate thread and continues recording
-    as long as the global is_recording flag is True.
-    """
-    global is_recording
-    recognizer = sr.Recognizer()
-
-    with sr.Microphone() as source:
-        logger.info("Recording audio. Please speak now...")
-        recognizer.adjust_for_ambient_noise(source)
-
-        dot_thread, dot_count, message = provide_feedback("Recording")
-
-        audio_chunks: list[AudioData] = []
-        while is_recording:
-            if stop_recording.is_set():
-                logger.info("Recording stopped by 'esc' key.")
-                audio_chunks.clear()
-                break
-            audio_chunk = recognizer.record(source, duration=chunk_duration)
-            audio_chunks.append(audio_chunk)
-
-        clear_feedback(dot_thread, dot_count, message)
-
-    is_recording = False
-
-    # Combine all audio chunks
-    if audio_chunks:
-        raw_data = b"".join(chunk.get_raw_data() for chunk in audio_chunks)
-        combined_audio = sr.AudioData(
-            raw_data, audio_chunks[0].sample_rate, audio_chunks[0].sample_width
-        )
-        recording_queue.put(combined_audio)
-
 
 def print_dots(dot_count, lock, every=2):
     while getattr(threading.current_thread(), "do_run", True):
@@ -175,7 +184,7 @@ def clear_feedback(dot_thread, dot_count, message):
         time.sleep(0.001)
 
 
-def on_activate(model_name, language):
+def on_activate(model_name, language, audio_recorder):
     """
     Handle the activation of audio recording and transcription.
 
@@ -185,32 +194,30 @@ def on_activate(model_name, language):
     Args:
         model_name (str): The name of the Whisper model to use for transcription.
         language (str): The language to use for transcription.
+        audio_recorder (AudioRecorder): The AudioRecorder instance to use for recording.
     """
-    global is_recording, recording_thread
+    global dot_thread, dot_count, message
 
-    if not is_recording:
-        is_recording = True
-        stop_recording.clear()
-        logger.info(
-            "Started recording... Press 'esc' to stop recording without transcribing."
-        )
-        recording_thread = threading.Thread(target=record_audio)
-        recording_thread.start()
+    if not audio_recorder.is_recording:
+        audio_recorder.start_recording()
+        dot_thread, dot_count, message = provide_feedback("Recording")
         return
 
-    is_recording = False
-    stop_recording.set()
-    if recording_thread:
-        recording_thread.join()
+    audio_recorder.stop_recording_process()
+    if 'dot_thread' in globals() and dot_thread:
+        clear_feedback(dot_thread, dot_count, message)
+        dot_thread, dot_count, message = None, None, None
 
     logger.info("Transcribing audio...")
-    try:
-        audio_data = recording_queue.get_nowait()
+    audio_data = audio_recorder.get_recorded_audio()
+    if audio_data:
         dot_thread, dot_count, message = provide_feedback("Transcribing")
 
         transcription = transcribe_audio(audio_data, model_name, language)
 
-        clear_feedback(dot_thread, dot_count, message)
+        if 'dot_thread' in globals() and dot_thread:
+            clear_feedback(dot_thread, dot_count, message)
+            dot_thread, dot_count, message = None, None, None
 
         if transcription:
             logger.info(f"Transcription text: {transcription}")
@@ -219,7 +226,7 @@ def on_activate(model_name, language):
             logger.info("No transcription to type.")
 
         logger.info("Press hotkey to start recording again.")
-    except queue.Empty:
+    else:
         logger.info("No audio transcribed.")
 
 
@@ -248,17 +255,18 @@ def main(model_name, language):
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
     hotkey = parse_hotkey(os.getenv("HOTKEY"))
+    audio_recorder = AudioRecorder()
 
     def on_press(key):
         """Handle key press events."""
         global pressed_keys
         pressed_keys.add(key)
         if all(k in pressed_keys for k in hotkey):
-            on_activate(model_name, language)
+            on_activate(model_name, language, audio_recorder)
             pressed_keys.clear()  # Clear the set after activation
 
         if key == keyboard.Key.esc:
-            stop_recording.set()
+            audio_recorder.stop_recording_process()
 
     def on_release(key):
         """Handle key release events."""
