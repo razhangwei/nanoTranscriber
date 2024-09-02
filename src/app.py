@@ -122,6 +122,18 @@ def record_audio(chunk_duration=0.5):
         logger.info("Recording audio. Please speak now...")
         recognizer.adjust_for_ambient_noise(source)
 
+        message = "Recording"
+        keyboard_controller.type(message)
+
+        # Initialize a counter for dots and a lock
+        dot_count = [0]
+        dot_lock = threading.Lock()
+
+        # Start the dot printing in a separate thread
+        dot_thread = threading.Thread(target=print_dots, args=(dot_count, dot_lock))
+        dot_thread.daemon = True
+        dot_thread.start()
+
         audio_chunks: list[AudioData] = []
         while is_recording:
             if stop_recording.is_set():
@@ -130,6 +142,15 @@ def record_audio(chunk_duration=0.5):
                 break
             audio_chunk = recognizer.record(source, duration=chunk_duration)
             audio_chunks.append(audio_chunk)
+
+        # Stop the dot printing
+        dot_thread.do_run = False
+        dot_thread.join()
+
+        # Clear the "Recording" message and the dots
+        for _ in range(len(message) + dot_count[0]):
+            keyboard_controller.tap(keyboard.Key.backspace)
+            time.sleep(0.001)
 
     is_recording = False
 
@@ -179,7 +200,6 @@ def on_activate(model_name, language):
     # if triggered by hotkey during recording, stop recording and start transcription
     is_recording = False
     stop_recording.set()
-    logger.info("Stopped recording.")
     if recording_thread:
         recording_thread.join()
 
