@@ -12,8 +12,15 @@ from mlx_whisper.transcribe import ModelHolder
 import mlx.core as mx
 import queue
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Global variables
 is_recording = False
@@ -93,7 +100,7 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     )
     end_time = time.time()
     transcription_time = end_time - start_time
-    print(
+    logger.info(
         f"Transcription time: {transcription_time:.2f} s. "
         f"Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
     )
@@ -112,13 +119,13 @@ def record_audio(chunk_duration=0.5):
     recognizer = sr.Recognizer()
 
     with sr.Microphone() as source:
-        print("Recording audio. Please speak now...")
+        logger.info("Recording audio. Please speak now...")
         recognizer.adjust_for_ambient_noise(source)
 
         audio_chunks: list[AudioData] = []
         while is_recording:
             if stop_recording.is_set():
-                print("Recording stopped by 'esc' key.")
+                logger.info("Recording stopped by 'esc' key.")
                 audio_chunks.clear()
                 break
             audio_chunk = recognizer.record(source, duration=chunk_duration)
@@ -162,7 +169,7 @@ def on_activate(model_name, language):
     if not is_recording:
         is_recording = True
         stop_recording.clear()
-        print(
+        logger.info(
             "Started recording... Press 'esc' to stop recording without transcribing."
         )
         recording_thread = threading.Thread(target=record_audio)
@@ -172,11 +179,11 @@ def on_activate(model_name, language):
     # if triggered by hotkey during recording, stop recording and start transcription
     is_recording = False
     stop_recording.set()
-    print("Stopped recording.")
+    logger.info("Stopped recording.")
     if recording_thread:
         recording_thread.join()
 
-    print("Transcribing audio...")
+    logger.info("Transcribing audio...")
     try:
         audio_data = recording_queue.get_nowait()
         message = "Transcribing"
@@ -204,14 +211,14 @@ def on_activate(model_name, language):
             time.sleep(0.001)
 
         if transcription:
-            print(f"Transcription text: {transcription}")
+            logger.info(f"Transcription text: {transcription}")
             keyboard_controller.type(transcription)
         else:
-            print("No transcription to type.")
+            logger.info("No transcription to type.")
 
-        print("Press hotkey to start recording again.")
+        logger.info("Press hotkey to start recording again.")
     except queue.Empty:
-        print("No audio transcribed.")
+        logger.info("No audio transcribed.")
 
 
 @click.command()
@@ -230,14 +237,14 @@ def on_activate(model_name, language):
     "If not specified, it defaults to multilingual model and language will be auto detected.",
 )
 def main(model_name, language):
-    print("Welcome to AudioTranscriptionApp!")
-    print(f"Using Whisper model: {get_hf_repo(model_name, language)}")
-    print(f"Language set to: {language if language else 'auto-detect'}")
-    print(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
-    print("If hotkey doesn't work, press Enter to start recording manually.")
+    logger.info("Welcome to AudioTranscriptionApp!")
+    logger.info(f"Using Whisper model: {get_hf_repo(model_name, language)}")
+    logger.info(f"Language set to: {language if language else 'auto-detect'}")
+    logger.info(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
+    logger.info("If hotkey doesn't work, press Enter to start recording manually.")
 
     # Pre-load model
-    print("Pre-loading model...")
+    logger.info("Pre-loading model...")
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
 
     hotkey = parse_hotkey(os.getenv("HOTKEY"))
@@ -265,10 +272,10 @@ def main(model_name, language):
     while True:
         user_input = input("Press Enter to start recording manually (or 'q' to quit): ")
         if user_input.lower() == "q":
-            print("Exiting the application...")
+            logger.info("Exiting the application...")
             listener.stop()
             sys.exit(0)
-        print("Manual activation triggered.")
+        logger.info("Manual activation triggered.")
         on_activate(model_name, language)
 
 
