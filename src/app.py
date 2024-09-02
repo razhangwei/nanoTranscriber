@@ -117,6 +117,11 @@ def record_audio(chunk_duration=0.5):
 
         audio_chunks: list[AudioData] = []
         while is_recording:
+            if stop_recording.is_set():
+                print("Recording stopped by 'esc' key.")
+                is_recording = False
+                audio_chunks.clear()
+                break
             audio_chunk = recognizer.record(source, duration=chunk_duration)
             audio_chunks.append(audio_chunk)
 
@@ -149,31 +154,36 @@ def on_activate(model_name, language):
         language (str): The language to use for transcription.
     """
     global is_recording, recording_thread
+
     if not is_recording:
         is_recording = True
         stop_recording.clear()
-        print("Started recording...")
+        print(
+            "Started recording... Press 'esc' to stop recording without transcribing."
+        )
         recording_thread = threading.Thread(target=record_audio)
         recording_thread.start()
-    else:
-        stop_recording.set()
-        is_recording = False
-        print("Stopped recording.")
-        if recording_thread:
-            recording_thread.join()
-        try:
-            audio_data = recording_queue.get_nowait()
-            print("Transcribing audio...")
-            transcription = transcribe_audio(audio_data, model_name, language)
-            if transcription:
-                print(f"Transcription text: {transcription}")
-                keyboard_controller.type(
-                    transcription
-                )  # type the transcription to the current active window
-            else:
-                print("No transcription to type.")
-        except queue.Empty:
-            print("No audio data to transcribe.")
+        return
+
+    stop_recording.set()
+    is_recording = False
+    print("Stopped recording.")
+    if recording_thread:
+        recording_thread.join()
+
+    print("Transcribing audio...")
+    try:
+        audio_data = recording_queue.get_nowait()
+        transcription = transcribe_audio(audio_data, model_name, language)
+        if transcription:
+            print(f"Transcription text: {transcription}")
+            keyboard_controller.type(
+                transcription
+            )  # type the transcription to the current active window
+        else:
+            print("No transcription to type.")
+    except queue.Empty:
+        print("No audio data to transcribe.")
 
 
 @click.command()
@@ -212,13 +222,14 @@ def main(model_name, language):
             on_activate(model_name, language)
             pressed_keys.clear()  # Clear the set after activation
 
+        if key == keyboard.Key.esc:
+            stop_recording.set()
+
     def on_release(key):
         """Handle key release events."""
         global pressed_keys
         if key in pressed_keys:
             pressed_keys.remove(key)
-        if key == keyboard.Key.esc:
-            return False
 
     listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     listener.start()
