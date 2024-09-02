@@ -98,7 +98,7 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
         f"Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
     )
 
-    return result["text"]
+    return result["text"].strip()
 
 
 def record_audio(chunk_duration=0.5):
@@ -119,11 +119,12 @@ def record_audio(chunk_duration=0.5):
         while is_recording:
             if stop_recording.is_set():
                 print("Recording stopped by 'esc' key.")
-                is_recording = False
                 audio_chunks.clear()
                 break
             audio_chunk = recognizer.record(source, duration=chunk_duration)
             audio_chunks.append(audio_chunk)
+
+    is_recording = False
 
     # Combine all audio chunks
     if audio_chunks:
@@ -134,12 +135,15 @@ def record_audio(chunk_duration=0.5):
         combined_audio = sr.AudioData(
             raw_data, audio_chunks[0].sample_rate, audio_chunks[0].sample_width
         )
-
         recording_queue.put(combined_audio)
-    else:
-        print("No audio recorded.")
 
-    is_recording = False
+
+def print_dots(dot_count, lock, every=2):
+    while getattr(threading.current_thread(), "do_run", True):
+        keyboard_controller.type(".")
+        with lock:
+            dot_count[0] += 1
+        time.sleep(every)
 
 
 def on_activate(model_name, language):
@@ -165,8 +169,9 @@ def on_activate(model_name, language):
         recording_thread.start()
         return
 
-    stop_recording.set()
+    # if triggered by hotkey during recording, stop recording and start transcription
     is_recording = False
+    stop_recording.set()
     print("Stopped recording.")
     if recording_thread:
         recording_thread.join()
@@ -174,16 +179,37 @@ def on_activate(model_name, language):
     print("Transcribing audio...")
     try:
         audio_data = recording_queue.get_nowait()
+        message = "Transcribing"
+        keyboard_controller.type(message)
+
+        # Initialize a counter for dots and a lock
+        dot_count = [0]
+        dot_lock = threading.Lock()
+
+        # Start the dot printing in a separate thread
+        dot_thread = threading.Thread(target=print_dots, args=(dot_count, dot_lock))
+        dot_thread.daemon = True
+        dot_thread.start()
+
+        # Perform transcription
         transcription = transcribe_audio(audio_data, model_name, language)
+
+        # Stop the dot printing
+        dot_thread.do_run = False
+        dot_thread.join()
+
+        # Clear the "Transcribing..." message and the dots
+        for _ in range(len(message) + dot_count[0]):
+            keyboard_controller.tap(keyboard.Key.backspace)
+            time.sleep(0.001)
+
         if transcription:
             print(f"Transcription text: {transcription}")
-            keyboard_controller.type(
-                transcription
-            )  # type the transcription to the current active window
+            keyboard_controller.type(transcription)
         else:
             print("No transcription to type.")
     except queue.Empty:
-        print("No audio data to transcribe.")
+        print("No audio transcribed.")
 
 
 @click.command()
