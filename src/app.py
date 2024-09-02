@@ -241,8 +241,6 @@ def main(model_name, language):
     logger.info(f"Using Whisper model: {get_hf_repo(model_name, language)}")
     logger.info(f"Language set to: {language if language else 'auto-detect'}")
     logger.info(f"Press {os.getenv('HOTKEY')} to start recording and transcribe.")
-    logger.info("If hotkey doesn't work, press Enter to start recording manually.")
-
     # Pre-load model
     logger.info("Pre-loading model...")
     _ = ModelHolder.get_model(get_hf_repo(model_name, language), mx.float16)
@@ -266,17 +264,9 @@ def main(model_name, language):
         if key in pressed_keys:
             pressed_keys.remove(key)
 
-    listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-    listener.start()
-
-    while True:
-        user_input = input("Press Enter to start recording manually (or 'q' to quit): ")
-        if user_input.lower() == "q":
-            logger.info("Exiting the application...")
-            listener.stop()
-            sys.exit(0)
-        logger.info("Manual activation triggered.")
-        on_activate(model_name, language)
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        logger.info("Application is running. Press the hotkey to start recording.")
+        listener.join()
 
 
 if __name__ == "__main__":
