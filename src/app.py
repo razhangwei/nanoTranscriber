@@ -95,13 +95,13 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     transcription_time = end_time - start_time
     print(
         f"Transcription time: {transcription_time:.2f} s. "
-        "Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
+        f"Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
     )
 
     return result["text"]
 
 
-def record_audio():
+def record_audio(chunk_duration=0.5):
     """
     Record audio from the microphone and add it to the recording queue.
 
@@ -113,11 +113,11 @@ def record_audio():
 
     with sr.Microphone() as source:
         print("Recording audio. Please speak now...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
+        recognizer.adjust_for_ambient_noise(source)
 
         audio_chunks: list[AudioData] = []
         while is_recording:
-            audio_chunk: AudioData = recognizer.listen(source, timeout=1)
+            audio_chunk = recognizer.record(source, duration=chunk_duration)
             audio_chunks.append(audio_chunk)
 
     # Combine all audio chunks
