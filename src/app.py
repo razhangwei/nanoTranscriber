@@ -208,6 +208,8 @@ def on_activate(model_name, language):
             keyboard_controller.type(transcription)
         else:
             print("No transcription to type.")
+
+        print("Press hotkey to start recording again.")
     except queue.Empty:
         print("No audio transcribed.")
 
