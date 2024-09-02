@@ -94,7 +94,8 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     end_time = time.time()
     transcription_time = end_time - start_time
     print(
-        f"Transcription time: {transcription_time:.2f} s. Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
+        f"Transcription time: {transcription_time:.2f} s. "
+        "Speed: {len(result['text'].split()) / transcription_time:.2f} words per second."
     )
 
     return result["text"]
