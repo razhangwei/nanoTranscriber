@@ -29,14 +29,16 @@ class AudioTranscriptionApp(rumps.App):
         ModelHolder.get_model(get_hf_repo(self.model_name, self.language), mx.float16)
 
     def on_press(self, key):
-        self.hotkey.press(key)
+        if key == keyboard.Key.esc and self.audio_recorder.is_recording:
+            self.stop_recording(None)
+        else:
+            self.hotkey.press(key)
 
     def toggle_recording(self):
         if not self.audio_recorder.is_recording:
             self.start_recording(None)
         else:
             self.stop_recording(None)
-            self.transcribe_audio()
 
     @rumps.clicked("Start Recording")
     def start_recording(self, _):
@@ -48,9 +50,13 @@ class AudioTranscriptionApp(rumps.App):
 
     @rumps.clicked("Stop Recording")
     def stop_recording(self, _):
-        self.audio_recorder.stop_recording_process()
-        # self.title = "🎙️"
+        if self.audio_recorder.is_recording:
+            self.audio_recorder.stop_recording_process()
+            self.title = "🎙️"
+            rumps.notification("Audio Transcription", "Recording Stopped", "")
+            self.transcribe_audio()
 
+    def transcribe_audio(self):
         audio_data = self.audio_recorder.get_recorded_audio()
         if audio_data:
             self.feedback_manager.provide_feedback("Transcribing")
