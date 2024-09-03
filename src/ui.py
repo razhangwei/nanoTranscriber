@@ -2,9 +2,13 @@ import rumps
 import threading
 from pynput import keyboard
 import json
+import logging
 from utils import AudioRecorder, FeedbackManager
 from app import transcribe_audio, get_hf_repo, ModelHolder
 import mlx.core as mx
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class AudioTranscriptionApp(rumps.App):
@@ -109,6 +113,7 @@ class AudioTranscriptionApp(rumps.App):
 
     @rumps.clicked("Settings")
     def settings(self, _):
+        logger.debug("Opening settings window")
         window = rumps.Window(
             message="Enter settings (JSON format):",
             title="Settings",
@@ -118,14 +123,17 @@ class AudioTranscriptionApp(rumps.App):
         )
         response = window.run()
         if response.clicked:
+            logger.debug(f"Settings window response: {response.text}")
             try:
                 new_settings = json.loads(response.text)
                 self.configs.update(new_settings)
                 self.save_settings()
                 self.load_model()
-                rumps.notification("Settings", "Settings updated", "Model will be reloaded")
-            except json.JSONDecodeError:
-                rumps.notification("Settings", "Invalid JSON", "Settings were not updated")
+                logger.info("Settings updated successfully")
+                rumps.alert(title="Settings", message="Settings updated. Model will be reloaded.")
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON in settings: {e}")
+                rumps.alert(title="Settings Error", message="Invalid JSON. Settings were not updated.")
 
 
 if __name__ == "__main__":
