@@ -14,7 +14,6 @@ class AudioTranscriptionApp(rumps.App):
     def __init__(self):
         super(AudioTranscriptionApp, self).__init__("🎙️")
         self.menu = ["Start Recording", "Stop Recording", "Settings"]
-        self.is_recording = False
         self.hotkey = keyboard.HotKey(
             keyboard.HotKey.parse("<shift>+<ctrl>+<cmd>+r"), self.toggle_recording
         )
@@ -41,31 +40,16 @@ class AudioTranscriptionApp(rumps.App):
 
     @rumps.clicked("Start Recording")
     def start_recording(self, _):
-        if not self.is_recording:
-            self.is_recording = True
-            self.title = "🔴"  # Change icon to indicate recording
-            # Start your recording process here
-            # You might want to run this in a separate thread
-            threading.Thread(target=self.record_and_transcribe).start()
+        if not self.audio_recorder.is_recording:
+            self.audio_recorder.start_recording()
+            # self.title = "🔴"  # Change icon to indicate recording
+
             rumps.notification("Audio Transcription", "Recording Started", "")
 
     @rumps.clicked("Stop Recording")
     def stop_recording(self, _):
-        if self.is_recording:
-            self.is_recording = False
-            self.title = "🎙️"  # Change icon back to default
-            # Stop your recording process here
-            rumps.notification(
-                "Audio Transcription", "Recording Stopped", "Transcribing..."
-            )
-
-    def record_and_transcribe(self):
-        self.audio_recorder.start_recording()
-        self.feedback_manager.provide_feedback("Recording")
-
-    def transcribe_audio(self):
         self.audio_recorder.stop_recording_process()
-        self.feedback_manager.clear_feedback()
+        # self.title = "🎙️"
 
         audio_data = self.audio_recorder.get_recorded_audio()
         if audio_data:
@@ -79,7 +63,8 @@ class AudioTranscriptionApp(rumps.App):
                     "Transcription Complete",
                     transcription[:50] + "...",
                 )
-                # Here you might want to save the transcription or copy it to clipboard
+                # type the transcription via keyboard
+                self.feedback_manager.keyboard_controller.type(transcription)
             else:
                 rumps.notification(
                     "Audio Transcription", "No transcription available", ""

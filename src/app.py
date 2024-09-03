@@ -45,6 +45,7 @@ def get_hf_repo(model_name: str, language: str = None) -> str:
         return f"mlx-community/whisper-{model_name}-mlx"
 
 
+# TODO: remove and use keyboard.HotKey.parse instead.
 def parse_hotkey(hotkey_str: str) -> set[keyboard.Key]:
     """
     Parse a hotkey string into a set of Key objects.
