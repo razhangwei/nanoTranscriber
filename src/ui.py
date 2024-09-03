@@ -17,13 +17,16 @@ class AudioTranscriptionApp(rumps.App):
         self.hotkey = keyboard.HotKey(
             keyboard.HotKey.parse("<shift>+<ctrl>+<cmd>+r"), self.toggle_recording
         )
-        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
+        self.listener = keyboard.Listener(
+            on_press=self.on_press, on_release=self.on_release
+        )
         self.listener.start()
 
         self.audio_recorder = AudioRecorder()
         self.feedback_manager = FeedbackManager()
-        self.model_name = os.getenv("MODEL_NAME", "base")
-        self.language = os.getenv("LANGUAGE", None)
+        # TODO: read from Setting window instead.
+        self.model_name = os.getenv("MODEL_NAME", "large-v3")
+        self.language = os.getenv("LANGUAGE", "en")
 
         # Pre-load model
         ModelHolder.get_model(get_hf_repo(self.model_name, self.language), mx.float16)
