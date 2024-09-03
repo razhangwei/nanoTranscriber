@@ -22,6 +22,11 @@ class AudioTranscriptionApp(rumps.App):
         self.audio_recorder = AudioRecorder()
         self.feedback_manager = FeedbackManager()
         
+        self.default_configs = {
+            'model_name': 'large-v3',
+            'language': 'en'
+        }
+        self.configs = {}
         self.load_settings()
         
         # Pre-load model
@@ -68,7 +73,7 @@ class AudioTranscriptionApp(rumps.App):
         audio_data = self.audio_recorder.get_recorded_audio()
         if audio_data:
             self.feedback_manager.provide_feedback("Transcribing")
-            transcription = transcribe_audio(audio_data, self.model_name, self.language)
+            transcription = transcribe_audio(audio_data, self.configs['model_name'], self.configs['language'])
             self.feedback_manager.clear_feedback()
 
             if transcription:
@@ -90,41 +95,37 @@ class AudioTranscriptionApp(rumps.App):
         try:
             with open('settings.json', 'r') as f:
                 settings = json.load(f)
-            self.model_name = settings.get('model_name', 'large-v3')
-            self.language = settings.get('language', 'en')
+            self.configs = {**self.default_configs, **settings}
         except FileNotFoundError:
-            self.model_name = 'large-v3'
-            self.language = 'en'
+            self.configs = self.default_configs.copy()
             self.save_settings()
 
     def save_settings(self):
-        settings = {
-            'model_name': self.model_name,
-            'language': self.language
-        }
         with open('settings.json', 'w') as f:
-            json.dump(settings, f)
+            json.dump(self.configs, f)
 
     def load_model(self):
-        ModelHolder.get_model(get_hf_repo(self.model_name, self.language), mx.float16)
+        ModelHolder.get_model(get_hf_repo(self.configs['model_name'], self.configs['language']), mx.float16)
 
     @rumps.clicked("Settings")
     def settings(self, _):
         window = rumps.Window(
-            message="Enter settings (model_name,language):",
+            message="Enter settings (JSON format):",
             title="Settings",
-            default_text=f"{self.model_name},{self.language}",
+            default_text=json.dumps(self.configs, indent=2),
             ok="Save",
             dimensions=(320, 160),
         )
         response = window.run()
         if response.clicked:
-            model_name, language = response.text.split(',')
-            self.model_name = model_name.strip()
-            self.language = language.strip()
-            self.save_settings()
-            self.load_model()
-            rumps.notification("Settings", "Settings updated", "Model will be reloaded")
+            try:
+                new_settings = json.loads(response.text)
+                self.configs.update(new_settings)
+                self.save_settings()
+                self.load_model()
+                rumps.notification("Settings", "Settings updated", "Model will be reloaded")
+            except json.JSONDecodeError:
+                rumps.notification("Settings", "Invalid JSON", "Settings were not updated")
 
 
 if __name__ == "__main__":
