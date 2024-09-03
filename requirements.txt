@@ -4,3 +4,4 @@ mlx_whisper
 pynput
 click
 python-dotenv
+rumps
