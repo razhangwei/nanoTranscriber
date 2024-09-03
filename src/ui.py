@@ -17,7 +17,7 @@ class AudioTranscriptionApp(rumps.App):
         self.hotkey = keyboard.HotKey(
             keyboard.HotKey.parse("<shift>+<ctrl>+<cmd>+r"), self.toggle_recording
         )
-        self.listener = keyboard.Listener(on_press=self.on_press)
+        self.listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
 
         self.audio_recorder = AudioRecorder()
@@ -34,6 +34,9 @@ class AudioTranscriptionApp(rumps.App):
         else:
             self.hotkey.press(key)
 
+    def on_release(self, key):
+        self.hotkey.release(key)
+
     def toggle_recording(self):
         if not self.audio_recorder.is_recording:
             self.start_recording(None)
@@ -44,8 +47,9 @@ class AudioTranscriptionApp(rumps.App):
     def start_recording(self, _):
         if not self.audio_recorder.is_recording:
             self.audio_recorder.start_recording()
-            # self.title = "🔴"  # Change icon to indicate recording
-
+            self.title = "🔴"  # Change icon to indicate recording
+            self.menu["Start Recording"].set_callback(None)
+            self.menu["Stop Recording"].set_callback(self.stop_recording)
             rumps.notification("Audio Transcription", "Recording Started", "")
 
     @rumps.clicked("Stop Recording")
@@ -53,6 +57,8 @@ class AudioTranscriptionApp(rumps.App):
         if self.audio_recorder.is_recording:
             self.audio_recorder.stop_recording_process()
             self.title = "🎙️"
+            self.menu["Start Recording"].set_callback(self.start_recording)
+            self.menu["Stop Recording"].set_callback(None)
             rumps.notification("Audio Transcription", "Recording Stopped", "")
             self.transcribe_audio()
 
