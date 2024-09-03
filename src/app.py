@@ -1,18 +1,17 @@
+import logging
 import os
-import threading
 import time
-import speech_recognition as sr
+
+import click
+import mlx.core as mx
 import mlx_whisper
 import numpy as np
-import click
-from speech_recognition import AudioData
-from pynput import keyboard
-import sys
-from mlx_whisper.transcribe import ModelHolder
-import mlx.core as mx
-import queue
 from dotenv import load_dotenv
-import logging
+from mlx_whisper.transcribe import ModelHolder
+from pynput import keyboard
+from speech_recognition import AudioData
+
+from utils import AudioRecorder, FeedbackManager
 
 load_dotenv()
 
@@ -24,95 +23,7 @@ logger = logging.getLogger(__name__)
 
 CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
-
-# Global variables
-keyboard_controller = keyboard.Controller()
 pressed_keys = set()
-
-
-class AudioRecorder:
-    def __init__(self):
-        self.is_recording = False
-        self.recording_queue = queue.Queue()
-        self.stop_recording = threading.Event()
-        self.recording_thread = None
-
-    def start_recording(self):
-        if not self.is_recording:
-            self.is_recording = True
-            self.stop_recording.clear()
-            logger.info(
-                "Started recording... Press 'esc' to stop recording without transcribing."
-            )
-            self.recording_thread = threading.Thread(target=self._record_audio)
-            self.recording_thread.start()
-
-    def stop_recording_process(self):
-        self.is_recording = False
-        self.stop_recording.set()
-        if self.recording_thread:
-            self.recording_thread.join()
-
-    def _record_audio(self, chunk_duration=0.5):
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            logger.info("Recording audio. Please speak now...")
-            recognizer.adjust_for_ambient_noise(source)
-            audio_chunks = []
-            while self.is_recording:
-                if self.stop_recording.is_set():
-                    logger.info("Recording stopped by 'esc' key.")
-                    audio_chunks.clear()
-                    break
-                audio_chunk = recognizer.record(source, duration=chunk_duration)
-                audio_chunks.append(audio_chunk)
-
-        if audio_chunks:
-            raw_data = b"".join(chunk.get_raw_data() for chunk in audio_chunks)
-            combined_audio = sr.AudioData(
-                raw_data, audio_chunks[0].sample_rate, audio_chunks[0].sample_width
-            )
-            self.recording_queue.put(combined_audio)
-
-    def get_recorded_audio(self):
-        try:
-            return self.recording_queue.get_nowait()
-        except queue.Empty:
-            return None
-
-
-class FeedbackManager:
-    def __init__(self):
-        self.dot_thread = None
-        self.message = None
-
-    def provide_feedback(self, message):
-        self.message = message
-        keyboard_controller.type(self.message)
-        dot_lock = threading.Lock()
-
-        self.dot_thread = threading.Thread(target=self._print_dots, args=(dot_lock,))
-        self.dot_thread.daemon = True
-        self.dot_thread.start()
-
-    def _print_dots(self, lock, every=2):
-        while getattr(self.dot_thread, "do_run", True):
-            keyboard_controller.type(".")
-            with lock:
-                self.message += "."
-            time.sleep(every)
-
-    def clear_feedback(self):
-        if self.dot_thread:
-            self.dot_thread.do_run = False
-            self.dot_thread.join()
-
-            for _ in range(len(self.message)):
-                keyboard_controller.tap(keyboard.Key.backspace)
-                time.sleep(0.001)
-
-        self.dot_thread = None
-        self.message = None
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
@@ -224,7 +135,7 @@ def on_activate(model_name, language, audio_recorder, feedback_manager):
 
         if transcription:
             logger.info(f"Transcription text: {transcription}")
-            keyboard_controller.type(transcription)
+            feedback_manager.keyboard_controller.type(transcription)
         else:
             logger.info("No transcription to type.")
 
