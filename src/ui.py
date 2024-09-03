@@ -1,13 +1,10 @@
 import rumps
 import threading
 from pynput import keyboard
-import os
-from dotenv import load_dotenv
+import json
 from utils import AudioRecorder, FeedbackManager
 from app import transcribe_audio, get_hf_repo, ModelHolder
 import mlx.core as mx
-
-load_dotenv()
 
 
 class AudioTranscriptionApp(rumps.App):
@@ -24,12 +21,11 @@ class AudioTranscriptionApp(rumps.App):
 
         self.audio_recorder = AudioRecorder()
         self.feedback_manager = FeedbackManager()
-        # TODO: read from Setting window instead.
-        self.model_name = os.getenv("MODEL_NAME", "large-v3")
-        self.language = os.getenv("LANGUAGE", "en")
-
+        
+        self.load_settings()
+        
         # Pre-load model
-        ModelHolder.get_model(get_hf_repo(self.model_name, self.language), mx.float16)
+        self.load_model()
 
     def on_press(self, key):
         if key == keyboard.Key.esc and self.audio_recorder.is_recording:
@@ -90,19 +86,45 @@ class AudioTranscriptionApp(rumps.App):
         else:
             rumps.notification("Audio Transcription", "No audio recorded", "")
 
+    def load_settings(self):
+        try:
+            with open('settings.json', 'r') as f:
+                settings = json.load(f)
+            self.model_name = settings.get('model_name', 'large-v3')
+            self.language = settings.get('language', 'en')
+        except FileNotFoundError:
+            self.model_name = 'large-v3'
+            self.language = 'en'
+            self.save_settings()
+
+    def save_settings(self):
+        settings = {
+            'model_name': self.model_name,
+            'language': self.language
+        }
+        with open('settings.json', 'w') as f:
+            json.dump(settings, f)
+
+    def load_model(self):
+        ModelHolder.get_model(get_hf_repo(self.model_name, self.language), mx.float16)
+
     @rumps.clicked("Settings")
     def settings(self, _):
-        # Implement settings functionality
-        # You could use rumps.Window to create a simple settings window
         window = rumps.Window(
-            message="",
+            message="Enter settings (model_name,language):",
             title="Settings",
-            default_text="",
+            default_text=f"{self.model_name},{self.language}",
             ok="Save",
             dimensions=(320, 160),
         )
         response = window.run()
-        # Process settings here
+        if response.clicked:
+            model_name, language = response.text.split(',')
+            self.model_name = model_name.strip()
+            self.language = language.strip()
+            self.save_settings()
+            self.load_model()
+            rumps.notification("Settings", "Settings updated", "Model will be reloaded")
 
 
 if __name__ == "__main__":
