@@ -33,7 +33,7 @@ class AudioTranscriptionApp(rumps.App):
 
     def on_press(self, key):
         if key == keyboard.Key.esc and self.audio_recorder.is_recording:
-            self.stop_recording(None)
+            self.stop_recording(transcribe=False)
         else:
             self.hotkey.press(key)
 
@@ -44,7 +44,7 @@ class AudioTranscriptionApp(rumps.App):
         if not self.audio_recorder.is_recording:
             self.start_recording(None)
         else:
-            self.stop_recording(None)
+            self.stop_recording(transcribe=True)
 
     @rumps.clicked("Start Recording")
     def start_recording(self, _):
@@ -52,18 +52,21 @@ class AudioTranscriptionApp(rumps.App):
             self.audio_recorder.start_recording()
             self.title = "🔴"  # Change icon to indicate recording
             self.menu["Start Recording"].set_callback(None)
-            self.menu["Stop Recording"].set_callback(self.stop_recording)
+            self.menu["Stop Recording"].set_callback(
+                lambda _: self.stop_recording(transcribe=True)
+            )
             rumps.notification("Audio Transcription", "Recording Started", "")
 
     @rumps.clicked("Stop Recording")
-    def stop_recording(self, _):
+    def stop_recording(self, transcribe=True):
         if self.audio_recorder.is_recording:
             self.audio_recorder.stop_recording_process()
             self.title = "🎙️"
             self.menu["Start Recording"].set_callback(self.start_recording)
             self.menu["Stop Recording"].set_callback(None)
             rumps.notification("Audio Transcription", "Recording Stopped", "")
-            self.transcribe_audio()
+            if transcribe:
+                self.transcribe_audio()
 
     def transcribe_audio(self):
         audio_data = self.audio_recorder.get_recorded_audio()
