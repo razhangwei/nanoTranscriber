@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 
 CUSTOM_VOCAB = os.getenv("CUSTOM_VOCAB")
 
+
+# Global variables
+keyboard_controller = keyboard.Controller()
+pressed_keys = set()
+
+
 class AudioRecorder:
     def __init__(self):
         self.is_recording = False
@@ -35,7 +41,9 @@ class AudioRecorder:
         if not self.is_recording:
             self.is_recording = True
             self.stop_recording.clear()
-            logger.info("Started recording... Press 'esc' to stop recording without transcribing.")
+            logger.info(
+                "Started recording... Press 'esc' to stop recording without transcribing."
+            )
             self.recording_thread = threading.Thread(target=self._record_audio)
             self.recording_thread.start()
 
@@ -72,9 +80,39 @@ class AudioRecorder:
         except queue.Empty:
             return None
 
-# Global variables
-keyboard_controller = keyboard.Controller()
-pressed_keys = set()
+
+class FeedbackManager:
+    def __init__(self):
+        self.dot_thread = None
+        self.message = None
+
+    def provide_feedback(self, message):
+        self.message = message
+        keyboard_controller.type(self.message)
+        dot_lock = threading.Lock()
+
+        self.dot_thread = threading.Thread(target=self._print_dots, args=(dot_lock,))
+        self.dot_thread.daemon = True
+        self.dot_thread.start()
+
+    def _print_dots(self, lock, every=2):
+        while getattr(self.dot_thread, "do_run", True):
+            keyboard_controller.type(".")
+            with lock:
+                self.message += "."
+            time.sleep(every)
+
+    def clear_feedback(self):
+        if self.dot_thread:
+            self.dot_thread.do_run = False
+            self.dot_thread.join()
+
+            for _ in range(len(self.message)):
+                keyboard_controller.tap(keyboard.Key.backspace)
+                time.sleep(0.001)
+
+        self.dot_thread = None
+        self.message = None
 
 
 def get_hf_repo(model_name: str, language: str = None) -> str:
@@ -154,37 +192,7 @@ def transcribe_audio(audio: AudioData, model_name: str, language: str) -> str:
     return result["text"].strip()
 
 
-
-def print_dots(dot_count, lock, every=2):
-    while getattr(threading.current_thread(), "do_run", True):
-        keyboard_controller.type(".")
-        with lock:
-            dot_count[0] += 1
-        time.sleep(every)
-
-
-def provide_feedback(message):
-    keyboard_controller.type(message)
-    dot_count = [0]
-    dot_lock = threading.Lock()
-
-    dot_thread = threading.Thread(target=print_dots, args=(dot_count, dot_lock))
-    dot_thread.daemon = True
-    dot_thread.start()
-
-    return dot_thread, dot_count, message
-
-
-def clear_feedback(dot_thread, dot_count, message):
-    dot_thread.do_run = False
-    dot_thread.join()
-
-    for _ in range(len(message) + dot_count[0]):
-        keyboard_controller.tap(keyboard.Key.backspace)
-        time.sleep(0.001)
-
-
-def on_activate(model_name, language, audio_recorder):
+def on_activate(model_name, language, audio_recorder, feedback_manager):
     """
     Handle the activation of audio recording and transcription.
 
@@ -195,29 +203,24 @@ def on_activate(model_name, language, audio_recorder):
         model_name (str): The name of the Whisper model to use for transcription.
         language (str): The language to use for transcription.
         audio_recorder (AudioRecorder): The AudioRecorder instance to use for recording.
+        feedback_manager (FeedbackManager): The FeedbackManager instance to handle feedback.
     """
-    global dot_thread, dot_count, message
-
     if not audio_recorder.is_recording:
         audio_recorder.start_recording()
-        dot_thread, dot_count, message = provide_feedback("Recording")
+        feedback_manager.provide_feedback("Recording")
         return
 
     audio_recorder.stop_recording_process()
-    if 'dot_thread' in globals() and dot_thread:
-        clear_feedback(dot_thread, dot_count, message)
-        dot_thread, dot_count, message = None, None, None
+    feedback_manager.clear_feedback()
 
     logger.info("Transcribing audio...")
     audio_data = audio_recorder.get_recorded_audio()
     if audio_data:
-        dot_thread, dot_count, message = provide_feedback("Transcribing")
+        feedback_manager.provide_feedback("Transcribing")
 
         transcription = transcribe_audio(audio_data, model_name, language)
 
-        if 'dot_thread' in globals() and dot_thread:
-            clear_feedback(dot_thread, dot_count, message)
-            dot_thread, dot_count, message = None, None, None
+        feedback_manager.clear_feedback()
 
         if transcription:
             logger.info(f"Transcription text: {transcription}")
@@ -256,17 +259,19 @@ def main(model_name, language):
 
     hotkey = parse_hotkey(os.getenv("HOTKEY"))
     audio_recorder = AudioRecorder()
+    feedback_manager = FeedbackManager()
 
     def on_press(key):
         """Handle key press events."""
         global pressed_keys
         pressed_keys.add(key)
         if all(k in pressed_keys for k in hotkey):
-            on_activate(model_name, language, audio_recorder)
+            on_activate(model_name, language, audio_recorder, feedback_manager)
             pressed_keys.clear()  # Clear the set after activation
 
         if key == keyboard.Key.esc:
             audio_recorder.stop_recording_process()
+            feedback_manager.clear_feedback()
 
     def on_release(key):
         """Handle key release events."""
